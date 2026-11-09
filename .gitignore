@@ -9,6 +9,9 @@
 # Build artefacts (e.g. auto-ontology-mcp wheels from `uv build`)
 dist/
 *.egg-info/
+auto_ontology_backup.sql
+Data
+
 
 
 # dependencies

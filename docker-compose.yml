@@ -45,6 +45,8 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
+    volumes:
+      - ./Data/Movie_Lake:/data/movie_lake:ro
     env_file:
       - .env
     environment:
@@ -55,10 +57,6 @@ services:
     depends_on:
       postgres:
         condition: service_started
-      # Without this the backend starts before Alembic has run and 500s
-      # (UndefinedTable) on every catalog call. auto-ontology-migrate waits for
-      # `service_healthy`, a stronger gate than this service's
-      # `service_started`, so the backend would otherwise always win the race.
       auto-ontology-migrate:
         condition: service_completed_successfully
       ingestion-service:
@@ -78,6 +76,8 @@ services:
     # ingestion service serves its own on :3002. Liveness, not /health — that
     # one probes Postgres, and a container healthcheck gated on a dependency
     # marks this unhealthy over a blip a restart cannot fix.
+    volumes:
+    - ./Data/Movie_Lake:/data/movie_lake:ro
     healthcheck:
       test:
         [

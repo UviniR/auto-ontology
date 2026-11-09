@@ -93,10 +93,9 @@ class EmbedParams:
     embed_invoke_url: str
     api_key: str = field(default="", repr=False)
     embed_modality: str = "text"
-    inference_batch_size: int = 32
-    nim_http_max_concurrent: int = 32
+    inference_batch_size: int = 2
+    nim_http_max_concurrent: int = 1
     request_timeout_s: float = 600.0
-
 
 def get_embed_params() -> EmbedParams:
     return EmbedParams(
