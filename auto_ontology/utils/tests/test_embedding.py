@@ -188,7 +188,7 @@ def test_a_short_response_is_an_error_not_a_partial_batch(endpoint) -> None:
 
     endpoint(_short)
     with pytest.raises(RuntimeError, match="1 vector"):
-        embed_texts(["a", "b"], _params(), "passage")
+        embed_texts(["a", "b"], _params(inference_batch_size=2), "passage")
 
 
 def test_a_duplicated_index_is_an_error(endpoint) -> None:
@@ -201,13 +201,15 @@ def test_a_duplicated_index_is_an_error(endpoint) -> None:
 
     endpoint(_duplicated)
     with pytest.raises(RuntimeError, match="3 vector"):
-        embed_texts(["a", "b"], _params(), "passage")
+        embed_texts(["a", "b"], _params(inference_batch_size=2), "passage")
 
 
 def test_blank_texts_are_not_sent(endpoint) -> None:
     seen = endpoint(_ok)
 
-    vectors = embed_texts(["a", "  ", None, "b"], _params(), "passage")  # type: ignore[list-item]
+    vectors = embed_texts(
+        ["a", "  ", None, "b"], _params(inference_batch_size=2), "passage"
+    )  # type: ignore[list-item]
 
     assert vectors == [_vector("a"), None, None, _vector("b")]
     assert json.loads(seen[0].content)["input"] == ["a", "b"]

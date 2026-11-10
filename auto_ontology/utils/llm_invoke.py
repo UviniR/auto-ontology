@@ -46,6 +46,9 @@ class StrictLLMOutputModel(BaseModel):
 
 RETRY_MAX_ATTEMPTS = 3
 LLM_INVOKE_TIMEOUT_S = int(os.environ.get("LLM_INVOKE_TIMEOUT_S", "120"))
+_NON_REASONING_THINKING_BUDGET = int(
+    os.environ.get("NON_REASONING_THINKING_BUDGET", "1024")
+)
 
 # Concurrent LLM requests are unbounded here by default. A process-wide cap used
 # to live at this call site, defaulting to 6, to stop semantic compilation's
@@ -218,12 +221,25 @@ def _build_client(
     base_url: str,
     temperature: float,
     max_tokens: int,
+    reasoning_budget: int | None = None,
 ) -> BaseChatModel:
     """Build a chat client for the given model/endpoint.
 
     OpenAI-family models (``openai/``, ``azure/``, ``aws/`` prefixes) go through
     ``ChatOpenAI``, which supports structured output. Everything else uses
     ``ChatNVIDIA``.
+
+    ``ChatNVIDIA`` models get ``chat_template_kwargs.reasoning_budget``, a cap on
+    thinking tokens. It defaults to half of ``max_tokens``. Hybrid models such as
+    Nemotron 3.5 reason by default, and uncapped they can overrun either the
+    token limit or ``LLM_INVOKE_TIMEOUT_S`` (the FK suggester's ``FkAndPkResult``
+    on a wide table, or the intent prompt). Either way no content comes back, and
+    ChatNVIDIA falls back to ``nvext.guided_json``, which the hosted API rejects
+    with a 400 error.
+
+    Thinking is capped, never turned off. With ``enable_thinking=false`` the
+    intent step classified "Find a sci-fi movie rated above 8" as an
+    ``information`` question (4/4 runs) instead of ``calculation``.
     """
     if model.startswith(("openai/", "azure/", "aws/")):
         from langchain_openai import ChatOpenAI
@@ -249,6 +265,11 @@ def _build_client(
         base_url=base_url,
         temperature=temperature,
         max_tokens=max_tokens,
+        model_kwargs={
+            "chat_template_kwargs": {
+                "reasoning_budget": reasoning_budget or max_tokens // 2
+            }
+        },
     )
     client._client.get_session_fn = lambda: _TimeoutSession(LLM_INVOKE_TIMEOUT_S)
     return client
@@ -305,6 +326,10 @@ def get_non_reasoning_llm_client(
         base_url=_NON_REASONING_BASE_URL,
         temperature=temperature,
         max_tokens=max_tokens,
+        # Enough for every pipeline step to classify correctly (measured: 1024
+        # gets the intent step right every run, in ~10s), short enough that a
+        # step stays far below LLM_INVOKE_TIMEOUT_S.
+        reasoning_budget=_NON_REASONING_THINKING_BUDGET,
     )
     _remember_non_reasoning(client)
     return client

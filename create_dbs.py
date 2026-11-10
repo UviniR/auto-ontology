@@ -24,8 +24,8 @@ DATA_DIR = Path("Data")
 print(DATA_DIR)
 DB_DIR = Path("Data/Movie_Lake")
 
-CMU_DB = DB_DIR / "cmu_movies.db"
-TMDB_DB = DB_DIR / "tmdb_movies.db"
+CMU_DB = DB_DIR / "CMU_DB.db"
+TMDB_DB = DB_DIR / "TMDB_DB.db"
 
 
 # ==================================================
@@ -258,7 +258,7 @@ def create_tmdb_database():
     print("\nCreating TMDB database...")
 
     # Load CSV files.
-    movies = load_csv("TMDB_movies.csv")
+    movies = load_csv("tmdb_movies.csv")
     reviews = load_csv("imdb_reviews.csv")
 
     # Expected TMDB attributes.
@@ -283,13 +283,13 @@ def create_tmdb_database():
             "spoken_languages",
             "imdb_id"
         ],
-        "TMDB_movies"
+        "tmdb_movies"
     )
 
     validate_columns(
         reviews,
         ["imdb_id", "review"],
-        "IMDB_Reviews"
+        "imdb_Reviews"
     )
 
     # Keep identifiers as strings.
@@ -298,10 +298,10 @@ def create_tmdb_database():
     reviews["imdb_id"] = reviews["imdb_id"].astype("string")
 
     # Validate primary key.
-    validate_unique(movies, "movie_id", "TMDB_movies")
+    validate_unique(movies, "movie_id", "tmdb_movies")
 
     # IMDb ID is UNIQUE, not the primary key.
-    validate_unique(movies, "imdb_id", "TMDB_movies")
+    validate_unique(movies, "imdb_id", "tmdb_movies")
 
     # Validate IMDb review relationship.
     validate_foreign_key(
@@ -317,12 +317,12 @@ def create_tmdb_database():
         conn.execute("PRAGMA foreign_keys = ON")
 
         # Drop child before parent.
-        conn.execute("DROP TABLE IF EXISTS IMDB_Reviews")
-        conn.execute("DROP TABLE IF EXISTS TMDB_movies")
+        conn.execute("DROP TABLE IF EXISTS imdb_Reviews")
+        conn.execute("DROP TABLE IF EXISTS tmdb_movies")
 
         # Parent table.
         conn.execute("""
-            CREATE TABLE TMDB_movies (
+            CREATE TABLE tmdb_movies (
 
                 movie_id TEXT PRIMARY KEY,
 
@@ -350,26 +350,26 @@ def create_tmdb_database():
 
         # Child table.
         conn.execute("""
-                     CREATE TABLE IMDB_Reviews (
+                     CREATE TABLE imdb_Reviews (
                          review_index INTEGER PRIMARY KEY,
                          imdb_id TEXT NOT NULL,
                          review TEXT,
                          FOREIGN KEY (imdb_id)
-                         REFERENCES TMDB_movies(imdb_id)
+                         REFERENCES tmdb_movies(imdb_id)
 
             )
         """)
 
         # Insert records.
         movies.to_sql(
-            "TMDB_movies",
+            "tmdb_movies",
             conn,
             if_exists="append",
             index=False
         )
 
         reviews.to_sql(
-            "IMDB_Reviews",
+            "imdb_Reviews",
             conn,
             if_exists="append",
             index=False

@@ -23,6 +23,7 @@ from __future__ import annotations
 import itertools
 import logging
 import math
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -78,6 +79,14 @@ _RETRY_ATTEMPTS = 4
 _RETRY_BASE_SECONDS = 15.0
 _RETRY_MAX_SECONDS = 120.0
 
+# Inputs are cut to this many characters before they are sent. The hosted
+# endpoint no longer honors ``truncate: END``. An input past the model's
+# 4096-token window returns a 500 ("service inference failed"), and retrying
+# cannot fix it. Measured against nemotron-3.5-embed-1b, failures start near
+# 13.6k characters of plain English. Rows with numbers and IDs pack more
+# tokens per character, so the default leaves headroom.
+_MAX_INPUT_CHARS = int(os.environ.get("EMBED_MAX_INPUT_CHARS", "8000"))
+
 # Why a chunk came back unembedded, kept on the frame rather than on every row.
 _ERROR_ATTR = "embed_error"
 # Set when retrying cannot help: the request is wrong (bad key, unknown model,
@@ -93,9 +102,14 @@ class EmbedParams:
     embed_invoke_url: str
     api_key: str = field(default="", repr=False)
     embed_modality: str = "text"
-    inference_batch_size: int = 2
-    nim_http_max_concurrent: int = 1
+    # One text per request. The hosted nemotron-3.5-embed-1b returns a 500
+    # ("service inference failed") for most multi-input requests, even two
+    # copies of the same short row, while single inputs always succeed.
+    # Throughput comes from concurrency instead.
+    inference_batch_size: int = 1
+    nim_http_max_concurrent: int = 4
     request_timeout_s: float = 600.0
+
 
 def get_embed_params() -> EmbedParams:
     return EmbedParams(
@@ -171,7 +185,10 @@ def embed_texts(
     ingest-sized ``params.request_timeout_s`` and ``_REQUEST_RETRIES``; a caller
     with its own retry loop passes ``retries=0`` so the two do not multiply.
     """
-    stripped = [text.strip() if isinstance(text, str) else "" for text in texts]
+    stripped = [
+        text.strip()[:_MAX_INPUT_CHARS] if isinstance(text, str) else ""
+        for text in texts
+    ]
     to_send = [i for i, text in enumerate(stripped) if text]
     vectors: list[list[float] | None] = [None] * len(texts)
     if not to_send:
